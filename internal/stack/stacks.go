@@ -23,6 +23,7 @@ package stack
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -31,6 +32,10 @@ import (
 )
 
 const _defaultBufferSize = 64 * 1024 // 64 KiB
+
+var errNoStacks = errors.New("no stacks parsed")
+
+type stackParseErr string
 
 // Stack represents a single Goroutine's stack.
 type Stack struct {
@@ -66,7 +71,10 @@ func (s Stack) String() string {
 		s.id, s.state, s.firstFunction, s.Full())
 }
 
-func getStacks(all bool) []Stack {
+// getStacks parses stacks using the output of runtime.Stack.
+// An error is returned if a stack cannot be parsed, or if there are no
+// stacks parsed. At least one stack will be returned in case of success.
+func getStacks(all bool) ([]Stack, error) {
 	var stacks []Stack
 
 	var curStack *Stack
@@ -88,7 +96,11 @@ func getStacks(all bool) []Stack {
 			if curStack != nil {
 				stacks = append(stacks, *curStack)
 			}
-			id, goState := parseGoStackHeader(line)
+			id, goState, err := parseGoStackHeader(line)
+			if err != nil {
+				return nil, err
+			}
+
 			curStack = &Stack{
 				id:        id,
 				state:     goState,
@@ -105,17 +117,27 @@ func getStacks(all bool) []Stack {
 	if curStack != nil {
 		stacks = append(stacks, *curStack)
 	}
-	return stacks
+
+	if len(stacks) == 0 {
+		return nil, errNoStacks
+	}
+
+	return stacks, nil
 }
 
 // All returns the stacks for all running goroutines.
-func All() []Stack {
+func All() ([]Stack, error) {
 	return getStacks(true)
 }
 
 // Current returns the stack for the current goroutine.
-func Current() Stack {
-	return getStacks(false)[0]
+func Current() (Stack, error) {
+	stacks, err := getStacks(false)
+	if err != nil {
+		return Stack{}, err
+	}
+
+	return stacks[0], nil
 }
 
 func getStackBuffer(all bool) []byte {
@@ -138,18 +160,18 @@ func parseFirstFunc(line string) string {
 // parseGoStackHeader parses a stack header that looks like:
 // goroutine 643 [runnable]:\n
 // And returns the goroutine ID, and the state.
-func parseGoStackHeader(line string) (goroutineID int, state string) {
+func parseGoStackHeader(line string) (goroutineID int, state string, _ error) {
 	line = strings.TrimSuffix(line, ":\n")
 	parts := strings.SplitN(line, " ", 3)
 	if len(parts) != 3 {
-		panic(fmt.Sprintf("unexpected stack header format: %q", line))
+		return 0, "", fmt.Errorf(`stack header not in expected format "goroutine ID-NUM [state]", got %q`, line)
 	}
 
 	id, err := strconv.Atoi(parts[1])
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse goroutine ID: %v in line %q", parts[1], line))
+		return 0, "", fmt.Errorf("failed to parse goroutine ID: %v in line %q", parts[1], line)
 	}
 
 	state = strings.TrimSuffix(strings.TrimPrefix(parts[2], "["), "]")
-	return id, state
+	return id, state, nil
 }

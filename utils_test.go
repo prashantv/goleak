@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak/internal/stack"
 )
 
@@ -53,7 +54,8 @@ func (bg *blockedG) unblock() {
 }
 
 func getStableAll(t *testing.T, cur stack.Stack) []stack.Stack {
-	all := stack.All()
+	all, err := stack.All()
+	require.NoError(t, err, "stack.All() failed")
 
 	// There may be running goroutines that were just scheduled or finishing up
 	// from previous tests, so reduce flakiness by waiting till no other goroutines
@@ -68,7 +70,8 @@ func getStableAll(t *testing.T, cur stack.Stack) []stack.Stack {
 		}
 
 		runtime.Gosched()
-		all = stack.All()
+		all, err = stack.All()
+		require.NoError(t, err, "stack.All() failed")
 	}
 
 	return all

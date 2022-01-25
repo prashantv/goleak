@@ -31,7 +31,8 @@ import (
 
 func TestOptionsFilters(t *testing.T) {
 	opts := buildOpts()
-	cur := stack.Current()
+	cur, err := stack.Current()
+	require.NoError(t, err, "stack.Current() failed")
 	all := getStableAll(t, cur)
 
 	// At least one of these should be the same as current, the others should be filtered out.
@@ -48,7 +49,11 @@ func TestOptionsFilters(t *testing.T) {
 	// Now the filters should find something that doesn't match a filter.
 	countUnfiltered := func() int {
 		var unmatched int
-		for _, s := range stack.All() {
+
+		all, err := stack.All()
+		require.NoError(t, err, "stack.All() falied")
+
+		for _, s := range all {
 			if s.ID() == cur.ID() {
 				continue
 			}
@@ -62,7 +67,10 @@ func TestOptionsFilters(t *testing.T) {
 
 	// If we add an extra filter to ignore blockTill, it shouldn't match.
 	opts = buildOpts(IgnoreTopFunction("go.uber.org/goleak.(*blockedG).run"))
-	require.Zero(t, countUnfiltered(), "blockedG should be filtered out. running: %v", stack.All())
+
+	all, err = stack.All()
+	require.NoError(t, err, "stack.All() failed")
+	require.Zero(t, countUnfiltered(), "blockedG should be filtered out. running: %v", all)
 }
 
 func TestOptionsRetry(t *testing.T) {

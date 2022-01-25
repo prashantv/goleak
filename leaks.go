@@ -31,6 +31,8 @@ type TestingT interface {
 	Error(...interface{})
 }
 
+type stackParseErr struct{ error }
+
 // filterStacks will filter any stacks excluded by the given opts.
 // filterStacks modifies the passed in stacks slice.
 func filterStacks(stacks []stack.Stack, skipID int, opts *opts) []stack.Stack {
@@ -52,13 +54,23 @@ func filterStacks(stacks []stack.Stack, skipID int, opts *opts) []stack.Stack {
 // Find looks for extra goroutines, and returns a descriptive error if
 // any are found.
 func Find(options ...Option) error {
-	cur := stack.Current().ID()
+	curStack, err := stack.Current()
+	if err != nil {
+		return stackParseErr{err}
+	}
+
+	curID := curStack.ID()
 
 	opts := buildOpts(options...)
 	var stacks []stack.Stack
 	retry := true
 	for i := 0; retry; i++ {
-		stacks = filterStacks(stack.All(), cur, opts)
+		allStacks, err := stack.All()
+		if err != nil {
+			return stackParseErr{err}
+		}
+
+		stacks = filterStacks(allStacks, curID, opts)
 
 		if len(stacks) == 0 {
 			return nil
@@ -74,7 +86,29 @@ func Find(options ...Option) error {
 // tests by doing:
 // 	defer VerifyNone(t)
 func VerifyNone(t TestingT, options ...Option) {
-	if err := Find(options...); err != nil {
-		t.Error(err)
+	err := Find(options...)
+	if err == nil {
+		return
 	}
+
+	// Find failed, if it's not a stack parsing error, error out.
+	if _, ok := err.(stackParseErr); ok {
+		tryLogParseErr(t, err)
+		return
+	}
+
+	t.Error(err)
+}
+
+type testingTLoggable interface {
+	Log(args ...interface{})
+}
+
+func tryLogParseErr(t TestingT, err error) {
+	if t, ok := t.(testingTLoggable); ok {
+		t.Log("goleak: skipped due to stack parsing failures:", err)
+		return
+	}
+
+	t.Error("goleak: failed to parse stacks:", err)
 }

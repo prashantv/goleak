@@ -61,7 +61,11 @@ func IgnoreTopFunction(f string) Option {
 // them in any future Find/Verify calls.
 func IgnoreCurrent() Option {
 	excludeIDSet := map[int]bool{}
-	for _, s := range stack.All() {
+
+	// ignore errors, since they'll be caught as part of Find.
+	all, _ := stack.All()
+
+	for _, s := range all {
 		excludeIDSet[s.ID()] = true
 	}
 	return addFilter(func(s stack.Stack) bool {

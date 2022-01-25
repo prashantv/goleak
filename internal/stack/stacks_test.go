@@ -48,8 +48,11 @@ func TestAll(t *testing.T) {
 		go waitForDone()
 	}
 
-	cur := Current()
-	got := All()
+	cur, err := Current()
+	require.NoError(t, err, "Current failed to parse stack")
+
+	got, err := All()
+	require.NoError(t, err, "All failed to parse stacks")
 
 	// Retry until the background stacks are not runnable/running.
 	for {
@@ -57,7 +60,9 @@ func TestAll(t *testing.T) {
 			break
 		}
 		runtime.Gosched()
-		got = All()
+
+		got, err = All()
+		require.NoError(t, err, "All failed to parse stacks")
 	}
 
 	// We have exactly 7 gorotuines:
@@ -75,7 +80,8 @@ func TestAll(t *testing.T) {
 }
 
 func TestCurrent(t *testing.T) {
-	got := Current()
+	got, err := Current()
+	require.NoError(t, err, "Current failed to parse stack")
 	assert.NotZero(t, got.ID(), "Should get non-zero goroutine id")
 	assert.Equal(t, "running", got.State())
 	assert.Equal(t, "go.uber.org/goleak/internal/stack.getStackBuffer", got.FirstFunction())
